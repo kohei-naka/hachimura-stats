@@ -6,6 +6,7 @@ from typing import List, Optional
 import json
 from pathlib import Path
 from statistics import mean
+import os, urllib.request
 
 DATA_FILE = Path(__file__).parent.parent / "data" / "games_2024_25.json"
 
@@ -63,7 +64,21 @@ def health():
     return {"ok": True}
 
 def load_games() -> List[Game]:
-    data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    # 1) 環境変数 DATA_URL が指定されていれば、そこから取得
+    data_url = os.environ.get("DATA_URL")
+    raw = None
+    if data_url:
+        try:
+            with urllib.request.urlopen(data_url, timeout=10) as r:
+                raw = r.read().decode("utf-8")
+        except Exception:
+            raw = None  # 失敗したらローカルへフォールバック
+
+    # 2) フォールバック：ローカルのサンプルJSON
+    if raw is None:
+        raw = DATA_FILE.read_text(encoding="utf-8")
+
+    data = json.loads(raw)
     games: List[Game] = []
     for g in data:
         efg = calc_efg(g["fgm"], g["fg3m"], g["fga"])
