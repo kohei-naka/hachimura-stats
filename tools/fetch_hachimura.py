@@ -8,12 +8,25 @@ SEASON = int(os.getenv("SEASON", "2024"))
 PLAYER_NAME = os.getenv("PLAYER_NAME", "Rui Hachimura")
 OUT_PATH = os.getenv("OUT_PATH", "docs/data/games.json")
 API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
-API_KEY = os.getenv("BALDONTLIE_API_KEY")  # もし必要なら Secrets で設定（無ければ未使用）
+# API_KEY = os.getenv("BALDONTLIE_API_KEY")  # もし必要なら Secrets で設定（無ければ未使用）
 
-HEADERS = {"Authorization": API_KEY} if API_KEY else {}
+# HEADERS = {"Authorization": API_KEY} if API_KEY else {}
+
+API_KEY = os.getenv("BALDONTLIE_API_KEY")
+
+def api_headers():
+    if not API_KEY:
+        return {}
+    # ベンダーによって "Authorization: Bearer" or "X-API-KEY" のどちらか
+    return {
+        "Authorization": f"Bearer {API_KEY}",
+        "X-API-KEY": API_KEY,
+    }
 
 def get_player_id(name: str) -> int:
-    r = requests.get(f"{API_BASE}/players", params={"search": name, "per_page": 100}, headers=HEADERS, timeout=20)
+    r = requests.get(f"{API_BASE}/players",
+                    params={"search": name, "per_page": 100},
+                    headers=api_headers(), timeout=20)    
     r.raise_for_status()
     data = r.json()["data"]
     for p in data:
@@ -28,11 +41,9 @@ def list_stats(player_id: int, season: int):
     page, per_page = 1, 100
     out = []
     while True:
-        r = requests.get(
-            f"{API_BASE}/stats",
-            params={"player_ids[]": player_id, "seasons[]": season, "per_page": per_page, "page": page},
-            headers=HEADERS, timeout=30
-        )
+        r = requests.get(f"{API_BASE}/stats",
+                        params={"player_ids[]": player_id, "seasons[]": season, "per_page": per_page, "page": page},
+                        headers=api_headers(), timeout=30)
         r.raise_for_status()
         js = r.json()
         out.extend(js["data"])
