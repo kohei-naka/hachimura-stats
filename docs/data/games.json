@@ -1,0 +1,47 @@
+[
+  {
+    "date": "2025-10-22",
+    "opponent": "DEN",
+    "location": "home",
+    "min": 28,
+    "pts": 18,
+    "reb": 6,
+    "ast": 2,
+    "fga": 12,
+    "fgm": 7,
+    "fg3a": 4,
+    "fg3m": 2,
+    "fta": 4,
+    "ftm": 2
+  },
+  {
+    "date": "2025-10-24",
+    "opponent": "PHX",
+    "location": "away",
+    "min": 31,
+    "pts": 14,
+    "reb": 7,
+    "ast": 1,
+    "fga": 11,
+    "fgm": 6,
+    "fg3a": 3,
+    "fg3m": 1,
+    "fta": 2,
+    "ftm": 1
+  },
+  {
+    "date": "2025-10-26",
+    "opponent": "GSW",
+    "location": "home",
+    "min": 26,
+    "pts": 21,
+    "reb": 5,
+    "ast": 3,
+    "fga": 13,
+    "fgm": 8,
+    "fg3a": 5,
+    "fg3m": 3,
+    "fta": 3,
+    "ftm": 2
+  }
+]
