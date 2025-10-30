@@ -19,16 +19,10 @@ def api_headers():
         return {}
     return {
         "Authorization": f"Bearer {API_KEY}",
-        "X-API-KEY": API_KEY,
     }
 
 def api_params(extra: dict = None):
-    base = {}
-    if API_KEY:
-        base["api_key"] = API_KEY
-    if extra:
-        base.update(extra)
-    return base
+    return extra or {}
 
 def get_player_id(name: str) -> int:
     # "Rui Hachimura" → "Hachimura"
@@ -58,11 +52,16 @@ def list_stats(player_id: int, season: int):
     out = []
     while True:
         r = requests.get(
-            f"{API_BASE}/stats",
-            params=api_params({"player_ids[]": player_id, "seasons[]": season, "per_page": per_page, "page": page}),
-            headers=api_headers(),
-            timeout=30
-        )
+        f"{API_BASE}/stats",
+        params=api_params({
+            "player_ids[]": player_id,
+            "seasons[]": season,
+            "per_page": per_page,
+            "page": page
+        }),
+        headers=api_headers(),
+        timeout=30
+)
         r.raise_for_status()
         js = r.json()
         out.extend(js["data"])
