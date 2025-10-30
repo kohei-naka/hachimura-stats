@@ -24,17 +24,26 @@ def api_headers():
     }
 
 def get_player_id(name: str) -> int:
-    r = requests.get(f"{API_BASE}/players",
-                    params={"search": name, "per_page": 100},
-                    headers=api_headers(), timeout=20)    
+    # "Rui Hachimura" → "Hachimura"
+    last = name.split()[-1]
+    r = requests.get(
+        f"{API_BASE}/players",
+        params={"search": last, "per_page": 100},
+        headers=api_headers(),
+        timeout=20
+    )
     r.raise_for_status()
     data = r.json()["data"]
+
     for p in data:
         full = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
         if full.lower() == name.lower():
             return p["id"]
+
     if not data:
         raise RuntimeError(f"player not found: {name}")
+
+    # フルネーム一致が無くても、とりあえず先頭を返す
     return data[0]["id"]
 
 def list_stats(player_id: int, season: int):
