@@ -1,9 +1,14 @@
 name: Publish Hachimura Games JSON
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:       # ← これも残す（あとでAPI実行できるように）
   schedule:
-    - cron: "0 15 * * *"   # JST 00:00 相当
+    - cron: "0 15 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: write
