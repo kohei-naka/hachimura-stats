@@ -46,10 +46,10 @@ jobs:
           # 3) 空や壊れたJSONならエラーにする
           test -s docs/data/games.json
           python - << 'PY'
-import json,sys
-json.load(open("docs/data/games.json", encoding="utf-8"))
-print("JSON OK (valid).")
-PY
+          import json,sys
+          json.load(open("docs/data/games.json", encoding="utf-8"))
+          print("JSON OK (valid).")
+          PY
 
       - name: Show head of JSON (debug)
         run: |
