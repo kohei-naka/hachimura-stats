@@ -1,9 +1,9 @@
 name: Publish Hachimura Games JSON
 
 on:
-  workflow_dispatch:       # ← これも残す（あとでAPI実行できるように）
+  workflow_dispatch:
   schedule:
-    - cron: "0 15 * * *"
+    - cron: "0 15 * * *"   # JST 00:00
   push:
     branches: [main]
     paths:
@@ -39,22 +39,15 @@ jobs:
         run: |
           set -e
           mkdir -p docs/data
-          # 1) 既存ファイルを削除して“必ず差分”を作る
           rm -f docs/data/games.json || true
-          # 2) 実データを取得
           python tools/fetch_hachimura.py
-          # 3) 空や壊れたJSONならエラーにする
+          # 空ファイルなら失敗
           test -s docs/data/games.json
-          python - << 'PY'
-          import json,sys
-          json.load(open("docs/data/games.json", encoding="utf-8"))
-          print("JSON OK (valid).")
-          PY
+          # JSON 検証（ヒアドキュメントの代わりに -c を使用）
+          python -c "import json,sys; json.load(open('docs/data/games.json', encoding='utf-8')); print('JSON OK')"
 
       - name: Show head of JSON (debug)
-        run: |
-          echo "----- HEAD docs/data/games.json -----"
-          head -n 40 docs/data/games.json || true
+        run: head -n 40 docs/data/games.json || true
 
       - name: Commit & push
         uses: stefanzweifel/git-auto-commit-action@v5
