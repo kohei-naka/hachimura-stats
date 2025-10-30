@@ -1,9 +1,9 @@
 name: Publish Hachimura Games JSON
 
 on:
-  workflow_dispatch: {}     # 手動実行ボタン
+  workflow_dispatch: {}
   schedule:
-    - cron: "0 15 * * *"    # 毎日 UTC 15:00 = JST 00:00 頃
+    - cron: "0 15 * * *"   # JST 00:00 相当
 
 permissions:
   contents: write
@@ -12,32 +12,44 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install deps
-        run: python -m pip install --upgrade pip requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Build games.json (with retry)
+      - name: Build games.json (delete sample → fetch real)
         env:
-          SEASON: "2024"
+          SEASON: "2024"                  # 2024-25
           PLAYER_NAME: "Rui Hachimura"
           OUT_PATH: "docs/data/games.json"
           BALDONTLIE_API_KEY: ${{ secrets.BALDONTLIE_API_KEY }}
         run: |
           set -e
           mkdir -p docs/data
-          python tools/fetch_hachimura.py || true
-          if [ ! -s docs/data/games.json ]; then
-            echo "retry #1"; sleep 10; python tools/fetch_hachimura.py || true
-          fi
-          if [ ! -s docs/data/games.json ]; then
-            echo "retry #2"; sleep 20; python tools/fetch_hachimura.py || true
-          fi
+          # 1) 既存ファイルを削除して“必ず差分”を作る
+          rm -f docs/data/games.json || true
+          # 2) 実データを取得
+          python tools/fetch_hachimura.py
+          # 3) 空や壊れたJSONならエラーにする
           test -s docs/data/games.json
+          python - << 'PY'
+import json,sys
+json.load(open("docs/data/games.json", encoding="utf-8"))
+print("JSON OK (valid).")
+PY
+
+      - name: Show head of JSON (debug)
+        run: |
+          echo "----- HEAD docs/data/games.json -----"
+          head -n 40 docs/data/games.json || true
 
       - name: Commit & push
         uses: stefanzweifel/git-auto-commit-action@v5
