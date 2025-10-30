@@ -18,7 +18,7 @@ def api_headers():
     if not API_KEY:
         return {}
     return {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": API_KEY  # Bearer を付けない
     }
 
 def api_params(extra: dict = None):
