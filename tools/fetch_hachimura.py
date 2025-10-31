@@ -15,6 +15,31 @@ API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
 API_KEY = os.getenv("BALDONTLIE_API_KEY")
 API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
 
+def auth_header_variants():
+    if not API_KEY:
+        return [{}]
+    return [
+        {"Authorization": API_KEY},                     # 例: "0ef0-...-272e"
+        {"Authorization": f"Bearer {API_KEY}"},         # 例: "Bearer ..."
+        {"X-API-KEY": API_KEY},                         # 例: ヘッダ名違い
+    ]
+
+def robust_get(path: str, params: dict, timeout: int = 30):
+    url = f"{API_BASE}{path}"
+    last_err = None
+    for headers in auth_header_variants():
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=timeout)
+            if r.status_code == 401:
+                last_err = requests.HTTPError(f"401 Unauthorized with headers={list(headers.keys())}")
+                continue
+            r.raise_for_status()
+            return r
+        except requests.HTTPError as e:
+            last_err = e
+    # 全方式ダメだった
+    raise last_err or RuntimeError("request failed without HTTPError")
+
 def api_headers():
     if not API_KEY:
         return {}
@@ -28,12 +53,7 @@ def api_params(extra: dict = None):
 def get_player_id(name: str) -> int:
     # "Rui Hachimura" → "Hachimura"
     last = name.split()[-1]
-    r = requests.get(
-        f"{API_BASE}/players",
-        params=api_params({"search": last, "per_page": 100}),
-        headers=api_headers(),
-        timeout=20
-    )
+    r = robust_get("/players", {"search": last, "per_page": 100}, timeout=20)
     r.raise_for_status()
     data = r.json()["data"]
 
@@ -56,17 +76,13 @@ def list_stats(player_id: int, season: int):
     page, per_page = 1, 100
     out = []
     while True:
-        r = requests.get(
-        f"{API_BASE}/stats",
-        params=api_params({
+        r = robust_get("/stats", {
             "player_ids[]": player_id,
             "seasons[]": season,
             "per_page": per_page,
             "page": page
-        }),
-        headers=api_headers(),
-        timeout=30
-        )
+        }, timeout=30)
+
         r.raise_for_status()
         js = r.json()
         out.extend(js["data"])
