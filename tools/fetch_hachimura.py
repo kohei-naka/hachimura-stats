@@ -30,15 +30,27 @@ def robust_get(path: str, params: dict, timeout: int = 30):
     for headers in auth_header_variants():
         try:
             r = requests.get(url, params=params, headers=headers, timeout=timeout)
-            if r.status_code == 401:
-                last_err = requests.HTTPError(f"401 Unauthorized with headers={list(headers.keys())}")
+            if r.status_code in (401, 403):
+                # ここで本文を表示（APIが“正しい付け方”を案内してくれることが多い）
+                print(f"DEBUG {r.status_code} with headers={list(headers.keys())}: {r.text[:300]}")
+                last_err = requests.HTTPError(f"{r.status_code} with {list(headers.keys())}")
                 continue
             r.raise_for_status()
             return r
         except requests.HTTPError as e:
             last_err = e
-    # 全方式ダメだった
     raise last_err or RuntimeError("request failed without HTTPError")
+
+def auth_header_variants():
+    if not API_KEY:
+        return [{}]
+    return [
+        {"Authorization": API_KEY},                      # 例: “0ef0-...”
+        {"Authorization": f"Bearer {API_KEY}"},          # Bearer 方式
+        {"X-API-KEY": API_KEY},                          # X-API-KEY
+        {"Authorization": f"Token {API_KEY}"},           # Token 方式
+        {"api-key": API_KEY},                            # 小文字 header
+    ]
 
 def api_headers():
     if not API_KEY:
