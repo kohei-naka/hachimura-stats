@@ -13,6 +13,7 @@ API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
 # HEADERS = {"Authorization": API_KEY} if API_KEY else {}
 
 API_KEY = os.getenv("BALDONTLIE_API_KEY")
+API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
 
 def api_headers():
     if not API_KEY:
@@ -65,7 +66,7 @@ def list_stats(player_id: int, season: int):
         }),
         headers=api_headers(),
         timeout=30
-)
+        )
         r.raise_for_status()
         js = r.json()
         out.extend(js["data"])
