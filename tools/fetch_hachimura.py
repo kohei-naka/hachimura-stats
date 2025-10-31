@@ -48,6 +48,10 @@ def get_player_id(name: str) -> int:
     return data[0]["id"]
 
 def list_stats(player_id: int, season: int):
+    # log
+    print(f"DEBUG: Requesting stats for player_id={player_id}, season={season}")
+    print("DEBUG: Headers:", api_headers())
+
     page, per_page = 1, 100
     out = []
     while True:
