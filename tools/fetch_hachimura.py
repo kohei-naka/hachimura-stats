@@ -1,162 +1,77 @@
 # tools/fetch_hachimura.py
-import json, os, time
-from datetime import datetime
-import requests
+import os, json, time, requests
 
-# balldontlie の season は「開始年」（例：2024-25シーズンなら 2024）
-SEASON = int(os.getenv("SEASON", "2024"))
-PLAYER_NAME = os.getenv("PLAYER_NAME", "Rui Hachimura")
 OUT_PATH = os.getenv("OUT_PATH", "docs/data/games.json")
-API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
-# API_KEY = os.getenv("BALDONTLIE_API_KEY")  # もし必要なら Secrets で設定（無ければ未使用）
+SEASON = os.getenv("SEASON", "2024")            # 2024-25
+PLAYER_NAME = os.getenv("PLAYER_NAME", "Rui Hachimura")
 
-# HEADERS = {"Authorization": API_KEY} if API_KEY else {}
+RAPID_KEY = os.getenv("RAPIDAPI_KEY")
+RAPID_HOST = "api-nba-v1.p.rapidapi.com"
+BASE = f"https://{RAPID_HOST}"
+HEADERS = {"X-RapidAPI-Key": RAPID_KEY, "X-RapidAPI-Host": RAPID_HOST}
 
-API_KEY = os.getenv("BALDONTLIE_API_KEY")
-API_BASE = os.getenv("BALDONTLIE_API_BASE", "https://api.balldontlie.io/v1")
-
-def auth_header_variants():
-    if not API_KEY:
-        return [{}]
-    return [
-        {"Authorization": API_KEY},                     # 例: "0ef0-...-272e"
-        {"Authorization": f"Bearer {API_KEY}"},         # 例: "Bearer ..."
-        {"X-API-KEY": API_KEY},                         # 例: ヘッダ名違い
-    ]
-
-def robust_get(path: str, params: dict, timeout: int = 30):
-    url = f"{API_BASE}{path}"
-    last_err = None
-    for headers in auth_header_variants():
+def rget(path, params=None, retry=3, wait=2):
+    url = f"{BASE}{path}"
+    last = None
+    for i in range(retry):
+        r = requests.get(url, headers=HEADERS, params=params or {}, timeout=30)
+        if r.status_code == 429:  # レート制限
+            time.sleep(wait*(i+1)); last = r; continue
         try:
-            r = requests.get(url, params=params, headers=headers, timeout=timeout)
-            if r.status_code in (401, 403):
-                # ここで本文を表示（APIが“正しい付け方”を案内してくれることが多い）
-                print(f"DEBUG {r.status_code} with headers={list(headers.keys())}: {r.text[:300]}")
-                last_err = requests.HTTPError(f"{r.status_code} with {list(headers.keys())}")
-                continue
-            r.raise_for_status()
-            return r
-        except requests.HTTPError as e:
-            last_err = e
-    raise last_err or RuntimeError("request failed without HTTPError")
+            r.raise_for_status(); return r.json()
+        except requests.HTTPError:
+            last = r
+            if 500 <= r.status_code < 600:
+                time.sleep(wait*(i+1)); continue
+            raise
+    raise requests.HTTPError(f"request failed: {last.status_code} {last.text[:200]}")
 
-def auth_header_variants():
-    if not API_KEY:
-        return [{}]
-    return [
-        {"Authorization": API_KEY},                      # 例: “0ef0-...”
-        {"Authorization": f"Bearer {API_KEY}"},          # Bearer 方式
-        {"X-API-KEY": API_KEY},                          # X-API-KEY
-        {"Authorization": f"Token {API_KEY}"},           # Token 方式
-        {"api-key": API_KEY},                            # 小文字 header
-    ]
+def find_player(fullname: str):
+    last = fullname.split()[-1]
+    data = rget("/players", {"search": last})
+    for p in data.get("response", []):
+        fn = f"{p.get('firstname','')} {p.get('lastname','')}".strip()
+        if fn.lower() == fullname.lower(): return p
+    return data.get("response", [None])[0]
 
-def api_headers():
-    if not API_KEY:
-        return {}
-    return {
-        "Authorization": API_KEY  # Bearer を付けない
-    }
-
-def api_params(extra: dict = None):
-    return extra or {}
-
-def get_player_id(name: str) -> int:
-    # "Rui Hachimura" → "Hachimura"
-    last = name.split()[-1]
-    r = robust_get("/players", {"search": last, "per_page": 100}, timeout=20)
-    r.raise_for_status()
-    data = r.json()["data"]
-
-    for p in data:
-        full = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
-        if full.lower() == name.lower():
-            return p["id"]
-
-    if not data:
-        raise RuntimeError(f"player not found: {name}")
-
-    # フルネーム一致が無くても、とりあえず先頭を返す
-    return data[0]["id"]
-
-def list_stats(player_id: int, season: int):
-    # log
-    print(f"DEBUG: Requesting stats for player_id={player_id}, season={season}")
-    print("DEBUG: Headers:", api_headers())
-
-    page, per_page = 1, 100
-    out = []
+def list_stats(player_id: int, season: str):
+    page = 1; out = []
     while True:
-        r = robust_get("/stats", {
-            "player_ids[]": player_id,
-            "seasons[]": season,
-            "per_page": per_page,
-            "page": page
-        }, timeout=30)
-
-        r.raise_for_status()
-        js = r.json()
-        out.extend(js["data"])
-        if page >= js["meta"]["total_pages"]:
-            break
+        data = rget("/players/statistics", {"id": player_id, "season": season, "page": page})
+        resp = data.get("response", [])
+        if not resp: break
+        for g in resp:
+            game = g.get("game", {}) or {}
+            out.append({
+                "date": (game.get("date") or {}).get("start") if isinstance(game.get("date"), dict) else game.get("date"),
+                "opponent": (g.get("team") or {}).get("name"),
+                "pts": g.get("points"), "reb": g.get("totReb"), "ast": g.get("assists"),
+                "stl": g.get("steals"), "blk": g.get("blocks"), "tov": g.get("turnovers"),
+                "fgm": g.get("fgm"), "fga": g.get("fga"),
+                "fg3m": g.get("tpm") or g.get("threePointsMade"),
+                "fg3a": g.get("tpa") or g.get("threePointsAttempted"),
+                "ftm": g.get("ftm"), "fta": g.get("fta"),
+                "min": g.get("min"),
+            })
         page += 1
-        time.sleep(0.2)
-    return out
-
-def mmss_to_minutes(mmss: str) -> int:
-    if not mmss or ":" not in mmss: return 0
-    m, _s = mmss.split(":")
-    return int(m)
-
-def extract_games(stats_raw):
-    # 所属チーム略称は最新行から推定（保険）
-    latest_team = stats_raw[0]["team"]["abbreviation"] if stats_raw else "LAL"
-    games = {}
-    for row in stats_raw:
-        g = row["game"]
-        date = g["date"][:10]  # YYYY-MM-DD
-        home_abbr = g["home_team"]["abbreviation"]
-        away_abbr = g["visitor_team"]["abbreviation"]
-        team_abbr = row.get("team", {}).get("abbreviation", latest_team)
-
-        if team_abbr == home_abbr:
-            location, opponent = "home", away_abbr
-        elif team_abbr == away_abbr:
-            location, opponent = "away", home_abbr
-        else:
-            # 稀に一致しない場合のフォールバック
-            location, opponent = "home", away_abbr
-
-        key = (date, opponent, location)
-        prev = games.get(key, {"min":0,"pts":0,"reb":0,"ast":0,"fga":0,"fgm":0,"fg3a":0,"fg3m":0,"fta":0,"ftm":0})
-        games[key] = {
-            "date": date,
-            "opponent": opponent,
-            "location": location,
-            "min": prev["min"] + mmss_to_minutes(row.get("min") or "0:00"),
-            "pts": prev["pts"] + int(row.get("pts") or 0),
-            "reb": prev["reb"] + int(row.get("reb") or 0),
-            "ast": prev["ast"] + int(row.get("ast") or 0),
-            "fga": prev["fga"] + int(row.get("fga") or 0),
-            "fgm": prev["fgm"] + int(row.get("fgm") or 0),
-            "fg3a": prev["fg3a"] + int(row.get("fg3a") or 0),
-            "fg3m": prev["fg3m"] + int(row.get("fg3m") or 0),
-            "fta": prev["fta"] + int(row.get("fta") or 0),
-            "ftm": prev["ftm"] + int(row.get("ftm") or 0),
-        }
-    out = list(games.values())
-    out.sort(key=lambda x: x["date"], reverse=True)
+        if page > 40: break  # 安全ブレーキ
     return out
 
 def main():
-    player_id = get_player_id(PLAYER_NAME)
-    stats = list_stats(player_id, SEASON)
-    games = extract_games(stats)
+    if not RAPID_KEY: raise RuntimeError("RAPIDAPI_KEY is not set")
+    player = find_player(PLAYER_NAME)
+    if not player: raise RuntimeError(f"player not found: {PLAYER_NAME}")
+    pid = player.get("id") or (player.get("player") or {}).get("id")
+    if not pid: raise RuntimeError("player id missing from API-NBA response")
+
+    print(f"DEBUG: player_id={pid} season={SEASON}")
+    stats = list_stats(pid, SEASON)
+    print(f"DEBUG: fetched {len(stats)} games")
+
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(games, f, ensure_ascii=False, indent=2)
-    print(f"✅ wrote {len(games)} games to {OUT_PATH}")
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+    print(f"✅ wrote {len(stats)} games to {OUT_PATH}")
 
 if __name__ == "__main__":
     main()
